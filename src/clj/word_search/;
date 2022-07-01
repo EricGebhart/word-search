@@ -1,0 +1,58 @@
+(ns components.bibliotheque
+  (:require [com.stuartsierra.component :as component]))
+
+
+(defn make-uri-dispatch [x y] x)
+
+(defmulti make-uri #'make-uri-dispatch)
+
+(defmethod make-uri :mem [_ {:keys [dbname]
+                             :or {:dbname "frontend-db"}}]
+  (str "datomic:mem://" dbname))
+
+(defmethod make-uri :dev [_ {:keys [dbname host port]
+                             :or {dbname "frontend-db"
+                                  host "localhost"
+                                  port 4334}}]
+  (str "datomic:dev://" host ":" port "/" dbname))
+
+(defmethod make-uri :dynamodb [_ {:keys [dbname table-name region access-key secret-key]
+                                  :or {dbname "db-production"
+                                       table-name "your-system-name"
+                                       region "us-east-1"}}]
+  ;;"datomic:ddb://us-east-1/your-system-name/db-production?
+  ;;  aws_access_key_id=<MICHALS_ACCESS_KEY_ID>&aws_secret_key=<MICHALS_SECRET_KEY_ID>"
+  (str "datomic:ddb://" region "/" table-name "/" dbname "?aws_access_key_id=" access-key "&aws_secret_key=" secret-key))
+
+(defrecord Bibliotheque [dbfile]
+  component/Lifecycle
+
+  (start [component]
+    (let [default-db "words.edn"
+          words (load-db default-db)]
+          
+      (assoc component
+             :words words
+             :word-count (count (keys db))
+             :db-file default-db
+             :started true)))
+  (stop [component]
+    (assoc component :started nil :db-file nil)))
+
+(defn datomic-db [options]
+  (map->Datomic {:options options}))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defn load-db [file]
+  (try (read-string (slurp default-db))
+       (catch {})))
+
+
+(defn add-word
+  [component word]
+  (assoc component :words (assoc (:words component) (:word word) word)))
+
+(defn save-db 
+  [component]
+  (spit (:db-file component) (:words component)))
